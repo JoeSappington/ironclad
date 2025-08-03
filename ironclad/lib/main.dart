@@ -37,13 +37,10 @@ class _MyHomePageState extends State<MyHomePage> {
     'Jul 31 - Overhead Press, Step Ups',
   ];
 
-  // Reuse the same instance of TrackerPage
-  final TrackerPage _trackerPage = const TrackerPage();
-
   void _goToTrackerPage() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => _trackerPage),
+      MaterialPageRoute(builder: (context) => const TrackerPage()),
     );
   }
 
