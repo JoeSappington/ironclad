@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:ironclad/pages/tracker_page.dart';
+
 
 void main() {
   runApp(const MyApp());
@@ -66,6 +68,12 @@ class _MyHomePageState extends State<MyHomePage> {
       _counter++;
     });
   }
+  void _goToTrackerPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const TrackerPage()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +116,11 @@ class _MyHomePageState extends State<MyHomePage> {
             Text(
               '$_counter',
               style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _goToTrackerPage,
+              child: const Text('Go to Tracker Page'),
             ),
           ],
         ),
