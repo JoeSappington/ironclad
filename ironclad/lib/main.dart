@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ironclad/pages/tracker_page.dart';
+import 'package:ironclad/pages/workout_history_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -58,6 +59,13 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  void _goToWorkoutHistoryPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const WorkoutHistoryPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -93,14 +101,28 @@ class _MyHomePageState extends State<MyHomePage> {
 
             // 🏋️ Begin Workout Button
             Center(
-              child: ElevatedButton.icon(
-                onPressed: _goToTrackerPage,
-                icon: const Icon(Icons.fitness_center),
-                label: const Text('Begin Workout'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
-                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
+              child: Column(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _goToTrackerPage,
+                    icon: const Icon(Icons.fitness_center),
+                    label: const Text('Begin Workout'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+                      textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _goToWorkoutHistoryPage,
+                    icon: const Icon(Icons.history),
+                    label: const Text('View Workout History'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
               ),
             ),
 
