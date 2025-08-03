@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ironclad/pages/tracker_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MyApp());
@@ -31,17 +32,30 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int workoutStreak = 3; // Placeholder for streak count
-  final List<String> recentWorkouts = [
-    'Aug 2 - Squat, Bench Press, Row',
-    'Aug 1 - Deadlift, Pull-Ups',
-    'Jul 31 - Overhead Press, Step Ups',
-  ];
+  List<String> recentWorkouts = [];
 
-  void _goToTrackerPage() {
-    Navigator.push(
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentWorkouts();
+  }
+
+  Future<void> _loadRecentWorkouts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedWorkouts = prefs.getStringList('recentWorkouts') ?? [];
+    setState(() {
+      recentWorkouts = storedWorkouts;
+    });
+  }
+
+  void _goToTrackerPage() async {
+    final updated = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const TrackerPage()),
     );
+    if (updated == true) {
+      _loadRecentWorkouts();
+    }
   }
 
   @override
@@ -92,19 +106,22 @@ class _MyHomePageState extends State<MyHomePage> {
 
             const SizedBox(height: 32),
 
-            // 🕒 Recent Workouts (Placeholder)
+            // 🕒 Recent Workouts
             const Text(
               'Recent Workouts',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            ...recentWorkouts.map((workout) => Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.calendar_today),
-                    title: Text(workout),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  ),
-                )),
+            if (recentWorkouts.isEmpty)
+              const Text('No workouts logged yet.')
+            else
+              ...recentWorkouts.map((workout) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.calendar_today),
+                      title: Text(workout),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    ),
+                  )),
           ],
         ),
       ),

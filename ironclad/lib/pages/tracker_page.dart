@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
+import 'dart:convert';
 
 class TrackerPage extends StatefulWidget {
   const TrackerPage({super.key});
@@ -24,10 +27,50 @@ class _TrackerPageState extends State<TrackerPage> {
   ];
 
   final List<ExerciseEntry> _exercises = [];
+  Map<String, List<Map<String, String>>> _previousLogs = {};
 
-  void _addExercise() {
+  @override
+  void initState() {
+    super.initState();
+    _loadPreviousLogs();
+  }
+
+  Future<void> _loadPreviousLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getStringList('recentWorkouts') ?? [];
+    for (final item in stored) {
+      try {
+        final decoded = jsonDecode(item);
+        if (decoded is Map<String, dynamic> && decoded['exercises'] is List) {
+          for (final e in decoded['exercises']) {
+            final name = e['name'];
+            final sets = (e['sets'] as List).cast<Map<String, dynamic>>();
+            _previousLogs[name] = sets.map((s) => {
+              'weight': s['weight'].toString(),
+              'reps': s['reps'].toString(),
+            }).toList();
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  void _addExercise({String? selected}) {
+    final entry = ExerciseEntry();
+    entry.selectedExercise = selected;
+
+    if (selected != null && _previousLogs.containsKey(selected)) {
+      final previousSets = _previousLogs[selected]!;
+      for (final set in previousSets) {
+        final s = ExerciseSet();
+        s.hintWeight = set['weight'] ?? '';
+        s.hintReps = set['reps'] ?? '';
+        entry.sets.add(s);
+      }
+    }
+
     setState(() {
-      _exercises.add(ExerciseEntry());
+      _exercises.add(entry);
     });
   }
 
@@ -38,7 +81,7 @@ class _TrackerPageState extends State<TrackerPage> {
     });
   }
 
-  void _logWorkout() {
+  void _logWorkout() async {
     final incomplete = _exercises.any((exercise) =>
         exercise.selectedExercise == null || exercise.sets.isEmpty);
 
@@ -48,6 +91,37 @@ class _TrackerPageState extends State<TrackerPage> {
       );
       return;
     }
+
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    final workout = {
+      'date': today,
+      'exercises': _exercises.map((e) {
+        return {
+          'name': e.selectedExercise,
+          'sets': e.sets.map((set) {
+            return {
+              'weight': set.weightController.text.trim(),
+              'reps': set.repsController.text.trim(),
+            };
+          }).toList(),
+        };
+      }).toList(),
+    };
+
+    final summary = '$today - ${_exercises.map((e) => e.selectedExercise ?? '').join(', ')}';
+
+    final prefs = await SharedPreferences.getInstance();
+
+    // Save readable summary string for dashboard
+    final existingSummaries = prefs.getStringList('recentWorkouts') ?? [];
+    existingSummaries.insert(0, summary);
+    await prefs.setStringList('recentWorkouts', existingSummaries.take(10).toList());
+
+    // Save full workout log
+    final existingLogs = prefs.getStringList('workoutLogs') ?? [];
+    existingLogs.insert(0, jsonEncode(workout));
+    await prefs.setStringList('workoutLogs', existingLogs.take(10).toList());
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Workout logged!')),
@@ -59,6 +133,8 @@ class _TrackerPageState extends State<TrackerPage> {
       }
       _exercises.clear();
     });
+    
+    Navigator.pop(context, true); // Signal main page to refresh
   }
 
   @override
@@ -86,7 +162,7 @@ class _TrackerPageState extends State<TrackerPage> {
             const SizedBox(height: 20),
 
             ElevatedButton.icon(
-              onPressed: _addExercise,
+              onPressed: () => _addExercise(),
               icon: const Icon(Icons.fitness_center),
               label: const Text('Add Exercise'),
             ),
@@ -110,9 +186,10 @@ class _TrackerPageState extends State<TrackerPage> {
                               value: exercise.selectedExercise,
                               hint: const Text('Select Exercise'),
                               onChanged: (value) {
-                                setState(() {
-                                  exercise.selectedExercise = value;
-                                });
+                                if (value != null && exercise.selectedExercise != value) {
+                                  _removeExercise(index);
+                                  _addExercise(selected: value);
+                                }
                               },
                               items: _exerciseOptions.map((e) {
                                 return DropdownMenuItem(
@@ -155,10 +232,10 @@ class _TrackerPageState extends State<TrackerPage> {
                                 child: TextField(
                                   controller: set.weightController,
                                   keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Weight',
+                                  decoration: InputDecoration(
+                                    hintText: (set.hintWeight?.isNotEmpty ?? false) ? set.hintWeight : 'Weight',
                                     isDense: true,
-                                    border: OutlineInputBorder(),
+                                    border: const OutlineInputBorder(),
                                   ),
                                 ),
                               ),
@@ -167,10 +244,10 @@ class _TrackerPageState extends State<TrackerPage> {
                                 child: TextField(
                                   controller: set.repsController,
                                   keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Reps',
+                                  decoration: InputDecoration(
+                                    hintText: (set.hintReps?.isNotEmpty ?? false) ? set.hintReps : 'Reps',
                                     isDense: true,
-                                    border: OutlineInputBorder(),
+                                    border: const OutlineInputBorder(),
                                   ),
                                 ),
                               ),
@@ -210,7 +287,8 @@ class _TrackerPageState extends State<TrackerPage> {
   }
 }
 
-// Helper classes to track per-exercise state
+// ========== Helper Classes ==========
+
 class ExerciseEntry {
   String? selectedExercise;
   final List<ExerciseSet> sets = [];
@@ -234,6 +312,8 @@ class ExerciseEntry {
 class ExerciseSet {
   final TextEditingController weightController = TextEditingController();
   final TextEditingController repsController = TextEditingController();
+  String? hintWeight;
+  String? hintReps;
 
   void dispose() {
     weightController.dispose();
