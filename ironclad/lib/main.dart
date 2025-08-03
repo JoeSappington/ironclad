@@ -118,10 +118,19 @@ class _MyHomePageState extends State<MyHomePage> {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
+            ElevatedButton.icon(
               onPressed: _goToTrackerPage,
-              child: const Text('Go to Tracker Page'),
+              icon: const Icon(Icons.fitness_center),
+              label: const Text(
+                'Begin Workout',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                textStyle: const TextStyle(fontSize: 16),
+              ),
             ),
+
           ],
         ),
       ),
