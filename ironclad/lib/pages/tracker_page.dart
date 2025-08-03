@@ -8,7 +8,7 @@ class TrackerPage extends StatefulWidget {
 }
 
 class _TrackerPageState extends State<TrackerPage> {
-  final List<String> _exercises = [
+  final List<String> _exerciseOptions = [
     'Squat',
     'Hip Thrust',
     'Step Ups',
@@ -23,61 +23,49 @@ class _TrackerPageState extends State<TrackerPage> {
     'Dumbbell Row',
   ];
 
-  String? _selectedExercise;
+  final List<ExerciseEntry> _exercises = [];
 
-  final List<TextEditingController> _weightControllers = [];
-  final List<TextEditingController> _repsControllers = [];
-
-  void _addSet() {
+  void _addExercise() {
     setState(() {
-      _weightControllers.add(TextEditingController());
-      _repsControllers.add(TextEditingController());
+      _exercises.add(ExerciseEntry());
     });
   }
 
-  void _removeSet(int index) {
+  void _removeExercise(int index) {
     setState(() {
-      _weightControllers[index].dispose();
-      _repsControllers[index].dispose();
-      _weightControllers.removeAt(index);
-      _repsControllers.removeAt(index);
+      _exercises[index].dispose();
+      _exercises.removeAt(index);
     });
   }
 
   void _logWorkout() {
-    if (_selectedExercise == null || _weightControllers.isEmpty) {
+    final incomplete = _exercises.any((exercise) =>
+        exercise.selectedExercise == null || exercise.sets.isEmpty);
+
+    if (incomplete) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select an exercise and add at least one set')),
+        const SnackBar(content: Text('Make sure each exercise has a name and at least one set')),
       );
       return;
     }
-
-    // No console printing here
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Workout logged!')),
     );
 
     setState(() {
-      _selectedExercise = null;
-      _clearAllSets();
+      for (final exercise in _exercises) {
+        exercise.dispose();
+      }
+      _exercises.clear();
     });
-  }
-
-  void _clearAllSets() {
-    for (var c in _weightControllers) {
-      c.dispose();
-    }
-    for (var c in _repsControllers) {
-      c.dispose();
-    }
-    _weightControllers.clear();
-    _repsControllers.clear();
   }
 
   @override
   void dispose() {
-    _clearAllSets();
+    for (final e in _exercises) {
+      e.dispose();
+    }
     super.dispose();
   }
 
@@ -97,74 +85,108 @@ class _TrackerPageState extends State<TrackerPage> {
             ),
             const SizedBox(height: 20),
 
-            DropdownButtonFormField<String>(
-              value: _selectedExercise,
-              hint: const Text('Select Exercise'),
-              onChanged: (value) {
-                setState(() {
-                  _selectedExercise = value;
-                  // Sets remain when switching exercises
-                });
-              },
-              items: _exercises.map((exercise) {
-                return DropdownMenuItem(
-                  value: exercise,
-                  child: Text(exercise),
-                );
-              }).toList(),
-            ),
-
-            const SizedBox(height: 20),
-
             ElevatedButton.icon(
-              onPressed: _selectedExercise == null ? null : _addSet,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Set'),
+              onPressed: _addExercise,
+              icon: const Icon(Icons.fitness_center),
+              label: const Text('Add Exercise'),
             ),
 
             const SizedBox(height: 20),
 
-            ...List.generate(_weightControllers.length, (index) {
-              return Dismissible(
-                key: ValueKey(_weightControllers[index]),
-                direction: DismissDirection.none,
-                background: const SizedBox(),
+            ..._exercises.asMap().entries.map((entry) {
+              final index = entry.key;
+              final exercise = entry.value;
+
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 12),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
                     children: [
-                      Text('Set ${index + 1}',
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _weightControllers[index],
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Weight',
-                            isDense: true,
-                            border: OutlineInputBorder(),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: exercise.selectedExercise,
+                              hint: const Text('Select Exercise'),
+                              onChanged: (value) {
+                                setState(() {
+                                  exercise.selectedExercise = value;
+                                });
+                              },
+                              items: _exerciseOptions.map((e) {
+                                return DropdownMenuItem(
+                                  value: e,
+                                  child: Text(e),
+                                );
+                              }).toList(),
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _repsControllers[index],
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Reps',
-                            isDense: true,
-                            border: OutlineInputBorder(),
+                          IconButton(
+                            onPressed: () => _removeExercise(index),
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            tooltip: 'Remove Exercise',
                           ),
-                        ),
+                        ],
                       ),
-                      IconButton(
-                        onPressed: () => _removeSet(index),
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        tooltip: 'Remove Set',
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            exercise.addSet();
+                          });
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Set'),
                       ),
+                      const SizedBox(height: 12),
+                      ...exercise.sets.asMap().entries.map((setEntry) {
+                        final setIndex = setEntry.key;
+                        final set = setEntry.value;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Set ${setIndex + 1}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: set.weightController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Weight',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: set.repsController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Reps',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    exercise.removeSet(setIndex);
+                                  });
+                                },
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                tooltip: 'Remove Set',
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                     ],
                   ),
                 ),
@@ -173,7 +195,7 @@ class _TrackerPageState extends State<TrackerPage> {
 
             const SizedBox(height: 30),
             ElevatedButton(
-              onPressed: _logWorkout,
+              onPressed: _exercises.isEmpty ? null : _logWorkout,
               child: const Text('Log Workout'),
             ),
             const SizedBox(height: 20),
@@ -185,5 +207,36 @@ class _TrackerPageState extends State<TrackerPage> {
         ),
       ),
     );
+  }
+}
+
+// Helper classes to track per-exercise state
+class ExerciseEntry {
+  String? selectedExercise;
+  final List<ExerciseSet> sets = [];
+
+  void addSet() {
+    sets.add(ExerciseSet());
+  }
+
+  void removeSet(int index) {
+    sets[index].dispose();
+    sets.removeAt(index);
+  }
+
+  void dispose() {
+    for (final set in sets) {
+      set.dispose();
+    }
+  }
+}
+
+class ExerciseSet {
+  final TextEditingController weightController = TextEditingController();
+  final TextEditingController repsController = TextEditingController();
+
+  void dispose() {
+    weightController.dispose();
+    repsController.dispose();
   }
 }
