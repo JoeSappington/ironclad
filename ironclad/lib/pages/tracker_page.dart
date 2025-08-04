@@ -40,45 +40,7 @@ class _TrackerPageState extends State<TrackerPage> {
     });
   }
 
-  void _logWorkout() async {
-    final incomplete = _exercises.any((exercise) =>
-        exercise.selectedExercise == null || exercise.sets.isEmpty);
-
-    if (incomplete) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Make sure each exercise has a name and at least one set')),
-      );
-      return;
-    }
-
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final exerciseNames = _exercises
-        .map((e) => e.selectedExercise ?? '')
-        .where((name) => name.isNotEmpty)
-        .toList();
-    final workoutSummary = '$today - ${exerciseNames.join(', ')}';
-
-    final prefs = await SharedPreferences.getInstance();
-    final existing = prefs.getStringList('recentWorkouts') ?? [];
-
-    existing.insert(0, workoutSummary);
-    await prefs.setStringList('recentWorkouts', existing.take(10).toList());
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Workout logged!')),
-    );
-
-    Navigator.pop(context, true); // Signal home page to refresh
-
-    setState(() {
-      for (final exercise in _exercises) {
-        exercise.dispose();
-      }
-      _exercises.clear();
-    });
-  }
-
-  bool _hasCompletedSet() {
+  bool get _hasValidSet {
     for (final exercise in _exercises) {
       for (final set in exercise.sets) {
         if (set.weightController.text.trim().isNotEmpty &&
@@ -88,6 +50,46 @@ class _TrackerPageState extends State<TrackerPage> {
       }
     }
     return false;
+  }
+
+  void _logWorkout() async {
+    final incomplete = _exercises.any((exercise) =>
+        exercise.selectedExercise == null || exercise.sets.isEmpty);
+
+    if (incomplete) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Each exercise needs a name and at least one set')),
+      );
+      return;
+    }
+
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final exerciseSummaries = _exercises.map((e) {
+      final sets = e.sets
+          .map((s) => '${s.weightController.text}x${s.repsController.text}')
+          .join(', ');
+      return '${e.selectedExercise}: $sets';
+    }).toList();
+
+    final workoutSummary = '$today - ${exerciseSummaries.join(' | ')}';
+
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getStringList('recentWorkouts') ?? [];
+    existing.insert(0, workoutSummary);
+    await prefs.setStringList('recentWorkouts', existing.take(10).toList());
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Workout logged!')),
+    );
+
+    setState(() {
+      for (final exercise in _exercises) {
+        exercise.dispose();
+      }
+      _exercises.clear();
+    });
+
+    Navigator.pop(context, true); // refresh main page
   }
 
   @override
@@ -108,7 +110,6 @@ class _TrackerPageState extends State<TrackerPage> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // Add Exercise Button (Top if no exercises exist)
             if (_exercises.isEmpty)
               Center(
                 child: ElevatedButton.icon(
@@ -159,16 +160,6 @@ class _TrackerPageState extends State<TrackerPage> {
                             ],
                           ),
                           const SizedBox(height: 12),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                exercise.addSet();
-                              });
-                            },
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Set'),
-                          ),
-                          const SizedBox(height: 12),
                           ...exercise.sets.asMap().entries.map((setEntry) {
                             final setIndex = setEntry.key;
                             final set = setEntry.value;
@@ -185,10 +176,11 @@ class _TrackerPageState extends State<TrackerPage> {
                                       controller: set.weightController,
                                       keyboardType: TextInputType.number,
                                       decoration: const InputDecoration(
-                                        hintText: 'Weight',
+                                        labelText: 'Weight',
                                         isDense: true,
                                         border: OutlineInputBorder(),
                                       ),
+                                      onChanged: (_) => setState(() {}),
                                     ),
                                   ),
                                   const SizedBox(width: 12),
@@ -197,10 +189,11 @@ class _TrackerPageState extends State<TrackerPage> {
                                       controller: set.repsController,
                                       keyboardType: TextInputType.number,
                                       decoration: const InputDecoration(
-                                        hintText: 'Reps',
+                                        labelText: 'Reps',
                                         isDense: true,
                                         border: OutlineInputBorder(),
                                       ),
+                                      onChanged: (_) => setState(() {}),
                                     ),
                                   ),
                                   IconButton(
@@ -216,14 +209,26 @@ class _TrackerPageState extends State<TrackerPage> {
                               ),
                             );
                           }),
+
+                          const SizedBox(height: 12),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                exercise.addSet();
+                              });
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Set'),
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  // Add Exercise Button (below each exercise)
+
+                  // Show Add Exercise below the most recent one
                   if (index == _exercises.length - 1)
                     Padding(
-                      padding: const EdgeInsets.only(top: 10),
+                      padding: const EdgeInsets.only(bottom: 20),
                       child: ElevatedButton.icon(
                         onPressed: _addExercise,
                         icon: const Icon(Icons.fitness_center),
@@ -236,8 +241,7 @@ class _TrackerPageState extends State<TrackerPage> {
 
             const SizedBox(height: 30),
 
-            // Log Workout Button
-            if (_hasCompletedSet())
+            if (_hasValidSet)
               ElevatedButton(
                 onPressed: _logWorkout,
                 child: const Text('Log Workout'),
@@ -249,7 +253,6 @@ class _TrackerPageState extends State<TrackerPage> {
   }
 }
 
-// Helper Classes
 class ExerciseEntry {
   String? selectedExercise;
   final List<ExerciseSet> sets = [];

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'add_workout_page.dart'; // You'll need to create this file
 
 class WorkoutHistoryPage extends StatefulWidget {
   const WorkoutHistoryPage({super.key});
@@ -31,6 +32,42 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     });
   }
 
+  Future<void> _deleteWorkout(int index) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Workout'),
+        content: const Text('Are you sure you want to delete this workout?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = prefs.getStringList('workoutLogs') ?? [];
+
+      jsonList.removeAt(index);
+      await prefs.setStringList('workoutLogs', jsonList);
+
+      setState(() {
+        _workouts.removeAt(index);
+      });
+    }
+  }
+
+  Future<void> _goToAddWorkoutPage() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddWorkoutPage()),
+    );
+    if (result == true) {
+      _loadWorkoutLogs();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -52,12 +89,23 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          date,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                date,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              tooltip: 'Delete Workout',
+                              onPressed: () => _deleteWorkout(index),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         ...exercises.map((e) {
@@ -94,6 +142,11 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
                 );
               },
             ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _goToAddWorkoutPage,
+        child: const Icon(Icons.add),
+        tooltip: 'Add Workout',
+      ),
     );
   }
 }
