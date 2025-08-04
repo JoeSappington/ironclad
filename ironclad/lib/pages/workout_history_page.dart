@@ -24,8 +24,15 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     final jsonList = prefs.getStringList('workoutLogs') ?? [];
 
     final parsed = jsonList
-        .map((e) => json.decode(e) as Map<String, dynamic>)
-        .toList();
+      .map((e) => json.decode(e) as Map<String, dynamic>)
+      .toList();
+
+    // Sort by date descending (most recent first)
+    parsed.sort((a, b) {
+      final dateA = DateTime.tryParse(a['date'] ?? '') ?? DateTime(2000);
+      final dateB = DateTime.tryParse(b['date'] ?? '') ?? DateTime(2000);
+      return dateB.compareTo(dateA);
+    });
 
     setState(() {
       _workouts = parsed;

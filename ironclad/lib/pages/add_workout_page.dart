@@ -11,8 +11,7 @@ class AddWorkoutPage extends StatefulWidget {
 }
 
 class _AddWorkoutPageState extends State<AddWorkoutPage> {
-  DateTime selectedDate = DateTime.now();
-  final List<String> exerciseOptions = [
+  final List<String> _exerciseOptions = [
     'Squat',
     'Hip Thrust',
     'Step Ups',
@@ -27,68 +26,87 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
     'Dumbbell Row',
   ];
 
-  final List<ManualExerciseEntry> exercises = [];
+  final List<ExerciseEntry> _exercises = [];
+  DateTime _selectedDateTime = DateTime.now();
+
+  bool get _canSaveWorkout {
+    for (final exercise in _exercises) {
+      for (final set in exercise.sets) {
+        if (set.weightController.text.trim().isNotEmpty &&
+            set.repsController.text.trim().isNotEmpty) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   void _addExercise() {
     setState(() {
-      exercises.add(ManualExerciseEntry());
+      final newExercise = ExerciseEntry(onChanged: _onFieldChanged);
+      _exercises.add(newExercise);
     });
   }
 
   void _removeExercise(int index) {
     setState(() {
-      exercises[index].dispose();
-      exercises.removeAt(index);
+      _exercises[index].dispose();
+      _exercises.removeAt(index);
     });
   }
 
-  void _saveWorkout() async {
-    if (exercises.any((e) => e.selectedExercise == null || e.sets.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Each exercise must have a name and at least one set')),
-      );
-      return;
-    }
+  void _onFieldChanged() {
+    setState(() {}); // Triggers re-evaluation of _canSaveWorkout
+  }
 
-    final formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
+  Future<void> _pickDateTime() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDateTime,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+
+    if (pickedDate != null) {
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(_selectedDateTime),
+      );
+
+      if (pickedTime != null) {
+        setState(() {
+          _selectedDateTime = DateTime(
+            pickedDate.year,
+            pickedDate.month,
+            pickedDate.day,
+            pickedTime.hour,
+            pickedTime.minute,
+          );
+        });
+      }
+    }
+  }
+
+  Future<void> _saveWorkout() async {
+    final formattedDate =
+        DateFormat('yyyy-MM-dd HH:mm').format(_selectedDateTime);
 
     final workout = {
       'date': formattedDate,
-      'exercises': exercises.map((e) => {
-            'name': e.selectedExercise,
-            'sets': e.sets.map((s) => {
-                  'weight': s.weightController.text,
-                  'reps': s.repsController.text,
-                }).toList(),
-          }).toList(),
+      'exercises': _exercises.map((e) => e.toJson()).toList(),
     };
 
     final prefs = await SharedPreferences.getInstance();
     final existing = prefs.getStringList('workoutLogs') ?? [];
-
     existing.insert(0, json.encode(workout));
-    await prefs.setStringList('workoutLogs', existing.take(50).toList());
+    await prefs.setStringList('workoutLogs', existing);
 
-    Navigator.pop(context, true);
-  }
-
-  Future<void> _selectDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null && picked != selectedDate) {
-      setState(() {
-        selectedDate = picked;
-      });
-    }
+    Navigator.pop(context, true); // Go back and signal success
   }
 
   @override
   void dispose() {
-    for (final e in exercises) {
+    for (final e in _exercises) {
       e.dispose();
     }
     super.dispose();
@@ -96,135 +114,171 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
 
   @override
   Widget build(BuildContext context) {
+    final displayDate =
+        DateFormat('MMM d, yyyy – h:mm a').format(_selectedDateTime);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Add Workout')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
+            // 🗓️ Show selected date & time
             Row(
               children: [
-                const Text('Date:'),
-                const SizedBox(width: 12),
-                Text(DateFormat('yyyy-MM-dd').format(selectedDate)),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: _selectDate,
+                const Icon(Icons.calendar_today),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Workout Date: $displayDate',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _pickDateTime,
                   child: const Text('Change'),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _addExercise,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Exercise'),
-            ),
-            const SizedBox(height: 20),
-            ...exercises.asMap().entries.map((entry) {
+
+            const SizedBox(height: 16),
+
+            if (_exercises.isEmpty)
+              Center(
+                child: ElevatedButton.icon(
+                  onPressed: _addExercise,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Exercise'),
+                ),
+              ),
+
+            ..._exercises.asMap().entries.map((entry) {
               final index = entry.key;
               final exercise = entry.value;
 
-              return Card(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      Row(
+              return Column(
+                children: [
+                  Card(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: exercise.selectedExercise,
-                              hint: const Text('Select Exercise'),
-                              onChanged: (value) {
-                                setState(() {
-                                  exercise.selectedExercise = value;
-                                });
-                              },
-                              items: exerciseOptions.map((e) {
-                                return DropdownMenuItem(
-                                  value: e,
-                                  child: Text(e),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => _removeExercise(index),
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            tooltip: 'Remove Exercise',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ...exercise.sets.asMap().entries.map((setEntry) {
-                        final setIndex = setEntry.key;
-                        final set = setEntry.value;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          Row(
                             children: [
-                              Text('Set ${setIndex + 1}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold)),
-                              const SizedBox(width: 12),
                               Expanded(
-                                child: TextField(
-                                  controller: set.weightController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Weight',
-                                    isDense: true,
-                                    border: OutlineInputBorder(),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: TextField(
-                                  controller: set.repsController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Reps',
-                                    isDense: true,
-                                    border: OutlineInputBorder(),
-                                  ),
+                                child: DropdownButtonFormField<String>(
+                                  value: exercise.selectedExercise,
+                                  hint: const Text('Select Exercise'),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      exercise.selectedExercise = value;
+                                    });
+                                  },
+                                  items: _exerciseOptions.map((e) {
+                                    return DropdownMenuItem(
+                                      value: e,
+                                      child: Text(e),
+                                    );
+                                  }).toList(),
                                 ),
                               ),
                               IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    exercise.removeSet(setIndex);
-                                  });
-                                },
+                                onPressed: () => _removeExercise(index),
                                 icon: const Icon(Icons.delete, color: Colors.red),
-                                tooltip: 'Remove Set',
                               ),
                             ],
                           ),
-                        );
-                      }),
-                      const SizedBox(height: 8),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            exercise.addSet();
-                          });
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Set'),
+                          const SizedBox(height: 12),
+                          ...exercise.sets.asMap().entries.map((setEntry) {
+                            final i = setEntry.key;
+                            final set = setEntry.value;
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: Row(
+                                children: [
+                                  Text('Set ${i + 1}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: set.weightController,
+                                      keyboardType: TextInputType.number,
+                                      onChanged: (_) => _onFieldChanged(),
+                                      decoration: const InputDecoration(
+                                        labelText: 'Weight',
+                                        isDense: true,
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: set.repsController,
+                                      keyboardType: TextInputType.number,
+                                      onChanged: (_) => _onFieldChanged(),
+                                      decoration: const InputDecoration(
+                                        labelText: 'Reps',
+                                        isDense: true,
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        exercise.removeSet(i);
+                                      });
+                                    },
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  exercise.addSet();
+                                });
+                              },
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Set'),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 12),
+                ],
               );
             }),
-            const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: exercises.isEmpty ? null : _saveWorkout,
-              child: const Text('Save Workout'),
-            ),
+
+            if (_exercises.isNotEmpty)
+              ElevatedButton.icon(
+                onPressed: _addExercise,
+                icon: const Icon(Icons.add),
+                label: const Text('Add Another Exercise'),
+              ),
+
+            const SizedBox(height: 24),
+
+            if (_canSaveWorkout)
+              ElevatedButton.icon(
+                onPressed: _saveWorkout,
+                icon: const Icon(Icons.save),
+                label: const Text('Save Workout'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
           ],
         ),
       ),
@@ -232,13 +286,18 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
   }
 }
 
-// Helper classes
-class ManualExerciseEntry {
+class ExerciseEntry {
   String? selectedExercise;
   final List<ExerciseSet> sets = [];
+  final VoidCallback? onChanged;
+
+  ExerciseEntry({this.onChanged});
 
   void addSet() {
-    sets.add(ExerciseSet());
+    final set = ExerciseSet();
+    set.weightController.addListener(_handleChange);
+    set.repsController.addListener(_handleChange);
+    sets.add(set);
   }
 
   void removeSet(int index) {
@@ -246,16 +305,30 @@ class ManualExerciseEntry {
     sets.removeAt(index);
   }
 
+  void _handleChange() {
+    if (onChanged != null) onChanged!();
+  }
+
   void dispose() {
     for (final set in sets) {
       set.dispose();
     }
   }
+
+  Map<String, dynamic> toJson() => {
+        'name': selectedExercise,
+        'sets': sets.map((s) => s.toJson()).toList(),
+      };
 }
 
 class ExerciseSet {
   final TextEditingController weightController = TextEditingController();
   final TextEditingController repsController = TextEditingController();
+
+  Map<String, dynamic> toJson() => {
+        'weight': weightController.text.trim(),
+        'reps': repsController.text.trim(),
+      };
 
   void dispose() {
     weightController.dispose();
