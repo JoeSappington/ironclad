@@ -56,7 +56,7 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
   }
 
   void _onFieldChanged() {
-    setState(() {}); // Triggers re-evaluation of _canSaveWorkout
+    setState(() {});
   }
 
   Future<void> _pickDateTime() async {
@@ -101,7 +101,7 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
     existing.insert(0, json.encode(workout));
     await prefs.setStringList('workoutLogs', existing);
 
-    Navigator.pop(context, true); // Go back and signal success
+    Navigator.pop(context, true);
   }
 
   @override
@@ -261,24 +261,30 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
             }),
 
             if (_exercises.isNotEmpty)
-              ElevatedButton.icon(
-                onPressed: _addExercise,
-                icon: const Icon(Icons.add),
-                label: const Text('Add Another Exercise'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _addExercise,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Exercise'),
+                  ),
+                  if (_canSaveWorkout)
+                    ElevatedButton.icon(
+                      onPressed: _saveWorkout,
+                      icon: const Icon(Icons.save),
+                      label: const Text('Save'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 16),
+                        textStyle: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                ],
               ),
 
             const SizedBox(height: 24),
-
-            if (_canSaveWorkout)
-              ElevatedButton.icon(
-                onPressed: _saveWorkout,
-                icon: const Icon(Icons.save),
-                label: const Text('Save Workout'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                  textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
           ],
         ),
       ),
@@ -291,7 +297,9 @@ class ExerciseEntry {
   final List<ExerciseSet> sets = [];
   final VoidCallback? onChanged;
 
-  ExerciseEntry({this.onChanged});
+  ExerciseEntry({this.onChanged}) {
+    addSet();
+  }
 
   void addSet() {
     final set = ExerciseSet();
