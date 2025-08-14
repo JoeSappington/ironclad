@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import 'package:intl/intl.dart';
 
 class TrackerPage extends StatefulWidget {
@@ -27,20 +28,7 @@ class _TrackerPageState extends State<TrackerPage> {
 
   final List<ExerciseEntry> _exercises = [];
 
-  void _addExercise() {
-    setState(() {
-      _exercises.add(ExerciseEntry());
-    });
-  }
-
-  void _removeExercise(int index) {
-    setState(() {
-      _exercises[index].dispose();
-      _exercises.removeAt(index);
-    });
-  }
-
-  bool get _hasValidSet {
+  bool get _canLogWorkout {
     for (final exercise in _exercises) {
       for (final set in exercise.sets) {
         if (set.weightController.text.trim().isNotEmpty &&
@@ -52,44 +40,39 @@ class _TrackerPageState extends State<TrackerPage> {
     return false;
   }
 
-  void _logWorkout() async {
-    final incomplete = _exercises.any((exercise) =>
-        exercise.selectedExercise == null || exercise.sets.isEmpty);
+  void _addExercise() {
+    setState(() {
+      final newExercise = ExerciseEntry(onChanged: _onFieldChanged);
+      _exercises.add(newExercise);
+    });
+  }
 
-    if (incomplete) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Each exercise needs a name and at least one set')),
-      );
-      return;
-    }
+  void _removeExercise(int index) {
+    setState(() {
+      _exercises[index].dispose();
+      _exercises.removeAt(index);
+    });
+  }
 
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final exerciseSummaries = _exercises.map((e) {
-      final sets = e.sets
-          .map((s) => '${s.weightController.text}x${s.repsController.text}')
-          .join(', ');
-      return '${e.selectedExercise}: $sets';
-    }).toList();
+  void _onFieldChanged() {
+    setState(() {}); // Recalculate _canLogWorkout
+  }
 
-    final workoutSummary = '$today - ${exerciseSummaries.join(' | ')}';
+  Future<void> _logWorkout() async {
+    final now = DateTime.now();
+    final formattedDate = DateFormat('yyyy-MM-dd HH:mm').format(now);
+
+    final workout = {
+      'date': formattedDate,
+      'exercises': _exercises.map((e) => e.toJson()).toList(),
+    };
 
     final prefs = await SharedPreferences.getInstance();
-    final existing = prefs.getStringList('recentWorkouts') ?? [];
-    existing.insert(0, workoutSummary);
-    await prefs.setStringList('recentWorkouts', existing.take(10).toList());
+    final existing = prefs.getStringList('workoutLogs') ?? [];
+    existing.insert(0, json.encode(workout));
+    await prefs.setStringList('workoutLogs', existing);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Workout logged!')),
-    );
-
-    setState(() {
-      for (final exercise in _exercises) {
-        exercise.dispose();
-      }
-      _exercises.clear();
-    });
-
-    Navigator.pop(context, true); // refresh main page
+    Navigator.pop(context, true);
   }
 
   @override
@@ -102,24 +85,24 @@ class _TrackerPageState extends State<TrackerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom + 24;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Current Workout'),
-      ),
+      appBar: AppBar(title: const Text('Current Workout')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
           children: [
             if (_exercises.isEmpty)
               Center(
                 child: ElevatedButton.icon(
                   onPressed: _addExercise,
-                  icon: const Icon(Icons.fitness_center),
+                  icon: const Icon(Icons.add),
                   label: const Text('Add Exercise'),
                 ),
               ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
 
             ..._exercises.asMap().entries.map((entry) {
               final index = entry.key;
@@ -128,7 +111,7 @@ class _TrackerPageState extends State<TrackerPage> {
               return Column(
                 children: [
                   Card(
-                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    margin: const EdgeInsets.symmetric(vertical: 8),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Column(
@@ -155,32 +138,31 @@ class _TrackerPageState extends State<TrackerPage> {
                               IconButton(
                                 onPressed: () => _removeExercise(index),
                                 icon: const Icon(Icons.delete, color: Colors.red),
-                                tooltip: 'Remove Exercise',
                               ),
                             ],
                           ),
                           const SizedBox(height: 12),
                           ...exercise.sets.asMap().entries.map((setEntry) {
-                            final setIndex = setEntry.key;
+                            final i = setEntry.key;
                             final set = setEntry.value;
+
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 6),
                               child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Set ${setIndex + 1}',
+                                  Text('Set ${i + 1}',
                                       style: const TextStyle(fontWeight: FontWeight.bold)),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: TextField(
                                       controller: set.weightController,
                                       keyboardType: TextInputType.number,
+                                      onChanged: (_) => _onFieldChanged(),
                                       decoration: const InputDecoration(
                                         labelText: 'Weight',
                                         isDense: true,
                                         border: OutlineInputBorder(),
                                       ),
-                                      onChanged: (_) => setState(() {}),
                                     ),
                                   ),
                                   const SizedBox(width: 12),
@@ -188,64 +170,71 @@ class _TrackerPageState extends State<TrackerPage> {
                                     child: TextField(
                                       controller: set.repsController,
                                       keyboardType: TextInputType.number,
+                                      onChanged: (_) => _onFieldChanged(),
                                       decoration: const InputDecoration(
                                         labelText: 'Reps',
                                         isDense: true,
                                         border: OutlineInputBorder(),
                                       ),
-                                      onChanged: (_) => setState(() {}),
                                     ),
                                   ),
                                   IconButton(
                                     onPressed: () {
                                       setState(() {
-                                        exercise.removeSet(setIndex);
+                                        exercise.removeSet(i);
                                       });
                                     },
                                     icon: const Icon(Icons.delete, color: Colors.red),
-                                    tooltip: 'Remove Set',
                                   ),
                                 ],
                               ),
                             );
                           }),
-
                           const SizedBox(height: 12),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                exercise.addSet();
-                              });
-                            },
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Set'),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  exercise.addSet();
+                                });
+                              },
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Set'),
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ),
-
-                  // Show Add Exercise below the most recent one
-                  if (index == _exercises.length - 1)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      child: ElevatedButton.icon(
-                        onPressed: _addExercise,
-                        icon: const Icon(Icons.fitness_center),
-                        label: const Text('Add Exercise'),
-                      ),
-                    ),
+                  const SizedBox(height: 12),
                 ],
               );
             }),
 
-            const SizedBox(height: 30),
-
-            if (_hasValidSet)
-              ElevatedButton(
-                onPressed: _logWorkout,
-                child: const Text('Log Workout'),
+            if (_exercises.isNotEmpty)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _addExercise,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Exercise'),
+                  ),
+                  if (_canLogWorkout)
+                    ElevatedButton.icon(
+                      onPressed: _logWorkout,
+                      icon: const Icon(Icons.save),
+                      label: const Text('Log Workout'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                ],
               ),
+
+            SizedBox(height: bottomPadding),
           ],
         ),
       ),
@@ -256,9 +245,17 @@ class _TrackerPageState extends State<TrackerPage> {
 class ExerciseEntry {
   String? selectedExercise;
   final List<ExerciseSet> sets = [];
+  final VoidCallback? onChanged;
+
+  ExerciseEntry({this.onChanged}) {
+    addSet();
+  }
 
   void addSet() {
-    sets.add(ExerciseSet());
+    final set = ExerciseSet();
+    set.weightController.addListener(_handleChange);
+    set.repsController.addListener(_handleChange);
+    sets.add(set);
   }
 
   void removeSet(int index) {
@@ -266,16 +263,30 @@ class ExerciseEntry {
     sets.removeAt(index);
   }
 
+  void _handleChange() {
+    if (onChanged != null) onChanged!();
+  }
+
   void dispose() {
     for (final set in sets) {
       set.dispose();
     }
   }
+
+  Map<String, dynamic> toJson() => {
+        'name': selectedExercise,
+        'sets': sets.map((s) => s.toJson()).toList(),
+      };
 }
 
 class ExerciseSet {
   final TextEditingController weightController = TextEditingController();
   final TextEditingController repsController = TextEditingController();
+
+  Map<String, dynamic> toJson() => {
+        'weight': weightController.text.trim(),
+        'reps': repsController.text.trim(),
+      };
 
   void dispose() {
     weightController.dispose();

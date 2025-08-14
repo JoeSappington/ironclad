@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ironclad/pages/tracker_page.dart';
 import 'package:ironclad/pages/workout_history_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 void main() {
   runApp(const MyApp());
@@ -32,38 +33,65 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int workoutStreak = 3; // Placeholder for streak count
-  List<String> recentWorkouts = [];
+  int workoutStreak = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadRecentWorkouts();
+    _calculateWorkoutStreak();
   }
 
-  Future<void> _loadRecentWorkouts() async {
+  Future<void> _calculateWorkoutStreak() async {
     final prefs = await SharedPreferences.getInstance();
-    final storedWorkouts = prefs.getStringList('recentWorkouts') ?? [];
+    final logs = prefs.getStringList('workoutLogs') ?? [];
+
+    final dates = logs.map((entry) {
+      final map = json.decode(entry) as Map<String, dynamic>;
+      final dateStr = map['date'] ?? '';
+      return DateTime.tryParse(dateStr)?.toLocal();
+    }).whereType<DateTime>().toList();
+
+    dates.sort((a, b) => b.compareTo(a));
+
+    int streak = 0;
+    DateTime today = DateTime.now();
+    for (int i = 0; i < dates.length; i++) {
+      final date = dates[i];
+      final streakDate = today.subtract(Duration(days: streak));
+      if (_isSameDay(date, streakDate)) {
+        streak++;
+      } else if (date.isBefore(streakDate)) {
+        break;
+      }
+    }
+
     setState(() {
-      recentWorkouts = storedWorkouts;
+      workoutStreak = streak;
     });
   }
 
-  void _goToTrackerPage() async {
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  Future<void> _goToTrackerPage() async {
     final updated = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const TrackerPage()),
     );
     if (updated == true) {
-      _loadRecentWorkouts();
+      _calculateWorkoutStreak();
     }
   }
 
-  void _goToWorkoutHistoryPage() {
-    Navigator.push(
+  Future<void> _goToWorkoutHistoryPage() async {
+    final updated = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const WorkoutHistoryPage()),
     );
+    if (updated == true) {
+      _calculateWorkoutStreak();
+    }
   }
 
   @override
@@ -89,7 +117,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     const Icon(Icons.local_fire_department, color: Colors.deepOrange),
                     const SizedBox(width: 12),
                     Text(
-                      '🔥 Workout Streak: $workoutStreak days',
+                      '🔥 Workout Streak: $workoutStreak day${workoutStreak == 1 ? '' : 's'}',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -125,25 +153,6 @@ class _MyHomePageState extends State<MyHomePage> {
                 ],
               ),
             ),
-
-            const SizedBox(height: 32),
-
-            // 🕒 Recent Workouts
-            const Text(
-              'Recent Workouts',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            if (recentWorkouts.isEmpty)
-              const Text('No workouts logged yet.')
-            else
-              ...recentWorkouts.map((workout) => Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.calendar_today),
-                      title: Text(workout),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    ),
-                  )),
           ],
         ),
       ),

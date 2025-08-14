@@ -4,10 +4,10 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 
 class AddWorkoutPage extends StatefulWidget {
-  final Map<String, dynamic>? initialWorkout;
+  final Map<String, dynamic>? existingWorkout;
   final int? workoutIndex;
 
-  const AddWorkoutPage({super.key, this.initialWorkout, this.workoutIndex});
+  const AddWorkoutPage({super.key, this.existingWorkout, this.workoutIndex});
 
   @override
   State<AddWorkoutPage> createState() => _AddWorkoutPageState();
@@ -32,33 +32,9 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
   final List<ExerciseEntry> _exercises = [];
   DateTime _selectedDateTime = DateTime.now();
 
-  @override
-  void initState() {
-    super.initState();
-
-    if (widget.initialWorkout != null) {
-      final workout = widget.initialWorkout!;
-      _selectedDateTime = DateTime.tryParse(workout['date'] ?? '') ?? DateTime.now();
-      final List<dynamic> exerciseList = workout['exercises'] ?? [];
-      for (final e in exerciseList) {
-        final entry = ExerciseEntry(onChanged: _onFieldChanged);
-        entry.selectedExercise = e['name'];
-        final sets = e['sets'] as List<dynamic>;
-        for (final set in sets) {
-          final newSet = ExerciseSet();
-          newSet.weightController.text = set['weight'] ?? '';
-          newSet.repsController.text = set['reps'] ?? '';
-          newSet.weightController.addListener(entry._handleChange);
-          newSet.repsController.addListener(entry._handleChange);
-          entry.sets.add(newSet);
-        }
-        _exercises.add(entry);
-      }
-    }
-  }
-
   bool get _canSaveWorkout {
     for (final exercise in _exercises) {
+      if (exercise.selectedExercise == null || exercise.selectedExercise!.isEmpty) continue;
       for (final set in exercise.sets) {
         if (set.weightController.text.trim().isNotEmpty &&
             set.repsController.text.trim().isNotEmpty) {
@@ -69,10 +45,39 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
     return false;
   }
 
+  @override
+  void initState() {
+    super.initState();
+
+    if (widget.existingWorkout != null) {
+      final dateStr = widget.existingWorkout!['date'];
+      _selectedDateTime = DateTime.tryParse(dateStr) ?? DateTime.now();
+
+      final exercises = widget.existingWorkout!['exercises'] as List<dynamic>;
+      for (final e in exercises) {
+        final entry = ExerciseEntry(onChanged: _onFieldChanged);
+        entry.selectedExercise = e['name'];
+        for (final s in e['sets']) {
+          final set = ExerciseSet();
+          set.weightController.text = s['weight'] ?? '';
+          set.repsController.text = s['reps'] ?? '';
+          set.weightController.addListener(entry._handleChange);
+          set.repsController.addListener(entry._handleChange);
+          entry.sets.add(set);
+        }
+        _exercises.add(entry);
+      }
+    }
+  }
+
+  void _onFieldChanged() {
+    setState(() {}); // Trigger re-evaluation
+  }
+
   void _addExercise() {
     setState(() {
-      final newExercise = ExerciseEntry(onChanged: _onFieldChanged);
-      _exercises.add(newExercise);
+      final entry = ExerciseEntry(onChanged: _onFieldChanged);
+      _exercises.add(entry);
     });
   }
 
@@ -82,8 +87,6 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
       _exercises.removeAt(index);
     });
   }
-
-  void _onFieldChanged() => setState(() {});
 
   Future<void> _pickDateTime() async {
     final pickedDate = await showDatePicker(
@@ -114,7 +117,8 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
   }
 
   Future<void> _saveWorkout() async {
-    final formattedDate = DateFormat('yyyy-MM-dd HH:mm').format(_selectedDateTime);
+    final formattedDate =
+        DateFormat('yyyy-MM-dd HH:mm').format(_selectedDateTime);
 
     final workout = {
       'date': formattedDate,
@@ -124,14 +128,17 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
     final prefs = await SharedPreferences.getInstance();
     final existing = prefs.getStringList('workoutLogs') ?? [];
 
-    if (widget.workoutIndex != null) {
+    if (widget.workoutIndex != null &&
+        widget.workoutIndex! >= 0 &&
+        widget.workoutIndex! < existing.length) {
       existing[widget.workoutIndex!] = json.encode(workout);
     } else {
       existing.insert(0, json.encode(workout));
     }
 
     await prefs.setStringList('workoutLogs', existing);
-    if (context.mounted) Navigator.pop(context, true);
+
+    Navigator.pop(context, true); // Return to previous page
   }
 
   @override
@@ -144,15 +151,18 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
 
   @override
   Widget build(BuildContext context) {
-    final displayDate = DateFormat('MMM d, yyyy – h:mm a').format(_selectedDateTime);
+    final displayDate =
+        DateFormat('MMM d, yyyy – h:mm a').format(_selectedDateTime);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Add Workout')),
       body: SafeArea(
+        bottom: true,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
+              // 🗓️ Date/Time Selector
               Row(
                 children: [
                   const Icon(Icons.calendar_today),
@@ -169,7 +179,9 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
                   ),
                 ],
               ),
+
               const SizedBox(height: 16),
+
               if (_exercises.isEmpty)
                 Center(
                   child: ElevatedButton.icon(
@@ -178,6 +190,7 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
                     label: const Text('Add Exercise'),
                   ),
                 ),
+
               ..._exercises.asMap().entries.map((entry) {
                 final index = entry.key;
                 final exercise = entry.value;
@@ -263,8 +276,10 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
                                   ],
                                 ),
                               );
-                            }),
+                            }).toList(),
+
                             const SizedBox(height: 12),
+
                             Align(
                               alignment: Alignment.centerLeft,
                               child: ElevatedButton.icon(
@@ -284,11 +299,13 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
                     const SizedBox(height: 12),
                   ],
                 );
-              }).toList(),
+              }),
 
               if (_exercises.isNotEmpty)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: _canSaveWorkout
+                      ? MainAxisAlignment.spaceBetween
+                      : MainAxisAlignment.center,
                   children: [
                     ElevatedButton.icon(
                       onPressed: _addExercise,
@@ -303,6 +320,8 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
                       ),
                   ],
                 ),
+
+              const SizedBox(height: 32),
             ],
           ),
         ),
@@ -310,6 +329,8 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
     );
   }
 }
+
+// ExerciseEntry and ExerciseSet
 
 class ExerciseEntry {
   String? selectedExercise;

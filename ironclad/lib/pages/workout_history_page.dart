@@ -12,6 +12,7 @@ class WorkoutHistoryPage extends StatefulWidget {
 
 class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
   List<Map<String, dynamic>> _workouts = [];
+  bool _modified = false;
 
   @override
   void initState() {
@@ -66,24 +67,8 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
 
       setState(() {
         _workouts.removeAt(index);
+        _modified = true;
       });
-    }
-  }
-
-  Future<void> _editWorkout(int index) async {
-    final selectedWorkout = _workouts[index];
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddWorkoutPage(
-          initialWorkout: selectedWorkout,
-          workoutIndex: index,
-        ),
-      ),
-    );
-
-    if (result == true) {
-      _loadWorkoutLogs();
     }
   }
 
@@ -92,95 +77,122 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
       context,
       MaterialPageRoute(builder: (context) => const AddWorkoutPage()),
     );
+    if (result == true) {
+      _modified = true;
+      await _loadWorkoutLogs();
+    }
+  }
+
+  Future<void> _goToEditWorkoutPage(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonList = prefs.getStringList('workoutLogs') ?? [];
+
+    final workoutData = json.decode(jsonList[index]) as Map<String, dynamic>;
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            AddWorkoutPage(existingWorkout: workoutData, workoutIndex: index),
+      ),
+    );
 
     if (result == true) {
-      _loadWorkoutLogs();
+      _modified = true;
+      await _loadWorkoutLogs();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Workout History')),
-      body: _workouts.isEmpty
-          ? const Center(child: Text('No workouts logged yet.'))
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _workouts.length,
-              itemBuilder: (context, index) {
-                final workout = _workouts[index];
-                final date = workout['date'] ?? 'Unknown Date';
-                final exercises = workout['exercises'] as List<dynamic>;
+    return WillPopScope(
+      onWillPop: () async {
+        Navigator.pop(context, _modified);
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Workout History')),
+        body: _workouts.isEmpty
+            ? const Center(child: Text('No workouts logged yet.'))
+            : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _workouts.length,
+                itemBuilder: (context, index) {
+                  final workout = _workouts[index];
+                  final date = workout['date'] ?? 'Unknown Date';
+                  final exercises = workout['exercises'] as List<dynamic>;
 
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                date,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              tooltip: 'Edit Workout',
-                              onPressed: () => _editWorkout(index),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              tooltip: 'Delete Workout',
-                              onPressed: () => _deleteWorkout(index),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ...exercises.map((e) {
-                          final name = e['name'];
-                          final sets = e['sets'] as List<dynamic>;
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Text(
-                                name,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
+                              Expanded(
+                                child: Text(
+                                  date,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
-                              ...sets.asMap().entries.map((entry) {
-                                final i = entry.key + 1;
-                                final set = entry.value;
-                                return Padding(
-                                  padding: const EdgeInsets.only(left: 12, top: 4),
-                                  child: Text(
-                                    'Set $i: ${set['weight']} lbs × ${set['reps']} reps',
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                );
-                              }),
-                              const SizedBox(height: 10),
+                              IconButton(
+                                icon: const Icon(Icons.edit),
+                                tooltip: 'Edit Workout',
+                                onPressed: () => _goToEditWorkoutPage(index),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                tooltip: 'Delete Workout',
+                                onPressed: () => _deleteWorkout(index),
+                              ),
                             ],
-                          );
-                        }),
-                      ],
+                          ),
+                          const SizedBox(height: 8),
+                          ...exercises.map((e) {
+                            final name = e['name'];
+                            final sets = e['sets'] as List<dynamic>;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                ...sets.asMap().entries.map((entry) {
+                                  final i = entry.key + 1;
+                                  final set = entry.value;
+                                  return Padding(
+                                    padding:
+                                        const EdgeInsets.only(left: 12, top: 4),
+                                    child: Text(
+                                      'Set $i: ${set['weight']} lbs × ${set['reps']} reps',
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  );
+                                }),
+                                const SizedBox(height: 10),
+                              ],
+                            );
+                          }),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _goToAddWorkoutPage,
-        child: const Icon(Icons.add),
-        tooltip: 'Add Workout',
+                  );
+                },
+              ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _goToAddWorkoutPage,
+          child: const Icon(Icons.add),
+          tooltip: 'Add Workout',
+        ),
       ),
     );
   }
