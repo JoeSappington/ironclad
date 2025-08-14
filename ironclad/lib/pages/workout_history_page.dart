@@ -11,7 +11,7 @@ class WorkoutHistoryPage extends StatefulWidget {
 }
 
 class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
-  List<Map<String, dynamic>> _workouts = [];
+  List<_WorkoutWithIndex> _workouts = [];
   bool _modified = false;
 
   @override
@@ -24,13 +24,15 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = prefs.getStringList('workoutLogs') ?? [];
 
-    final parsed = jsonList
-        .map((e) => json.decode(e) as Map<String, dynamic>)
-        .toList();
+    final parsed = jsonList.asMap().entries.map((entry) {
+      final originalIndex = entry.key;
+      final data = json.decode(entry.value) as Map<String, dynamic>;
+      return _WorkoutWithIndex(index: originalIndex, data: data);
+    }).toList();
 
     parsed.sort((a, b) {
-      final dateA = DateTime.tryParse(a['date'] ?? '') ?? DateTime(2000);
-      final dateB = DateTime.tryParse(b['date'] ?? '') ?? DateTime(2000);
+      final dateA = DateTime.tryParse(a.data['date'] ?? '') ?? DateTime(2000);
+      final dateB = DateTime.tryParse(b.data['date'] ?? '') ?? DateTime(2000);
       return dateB.compareTo(dateA);
     });
 
@@ -39,7 +41,7 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     });
   }
 
-  Future<void> _deleteWorkout(int index) async {
+  Future<void> _deleteWorkout(int sortedIndex) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -62,13 +64,14 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
       final prefs = await SharedPreferences.getInstance();
       final jsonList = prefs.getStringList('workoutLogs') ?? [];
 
-      jsonList.removeAt(index);
-      await prefs.setStringList('workoutLogs', jsonList);
+      final originalIndex = _workouts[sortedIndex].index;
 
-      setState(() {
-        _workouts.removeAt(index);
+      if (originalIndex < jsonList.length) {
+        jsonList.removeAt(originalIndex);
+        await prefs.setStringList('workoutLogs', jsonList);
         _modified = true;
-      });
+        await _loadWorkoutLogs();
+      }
     }
   }
 
@@ -83,23 +86,27 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     }
   }
 
-  Future<void> _goToEditWorkoutPage(int index) async {
+  Future<void> _goToEditWorkoutPage(int sortedIndex) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = prefs.getStringList('workoutLogs') ?? [];
 
-    final workoutData = json.decode(jsonList[index]) as Map<String, dynamic>;
+    final originalIndex = _workouts[sortedIndex].index;
 
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            AddWorkoutPage(existingWorkout: workoutData, workoutIndex: index),
-      ),
-    );
+    if (originalIndex < jsonList.length) {
+      final workoutData = json.decode(jsonList[originalIndex]) as Map<String, dynamic>;
 
-    if (result == true) {
-      _modified = true;
-      await _loadWorkoutLogs();
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              AddWorkoutPage(existingWorkout: workoutData, workoutIndex: originalIndex),
+        ),
+      );
+
+      if (result == true) {
+        _modified = true;
+        await _loadWorkoutLogs();
+      }
     }
   }
 
@@ -118,7 +125,7 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
                 padding: const EdgeInsets.all(16),
                 itemCount: _workouts.length,
                 itemBuilder: (context, index) {
-                  final workout = _workouts[index];
+                  final workout = _workouts[index].data;
                   final date = workout['date'] ?? 'Unknown Date';
                   final exercises = workout['exercises'] as List<dynamic>;
 
@@ -170,8 +177,7 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
                                   final i = entry.key + 1;
                                   final set = entry.value;
                                   return Padding(
-                                    padding:
-                                        const EdgeInsets.only(left: 12, top: 4),
+                                    padding: const EdgeInsets.only(left: 12, top: 4),
                                     child: Text(
                                       'Set $i: ${set['weight']} lbs × ${set['reps']} reps',
                                       style: const TextStyle(fontSize: 14),
@@ -196,4 +202,11 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
       ),
     );
   }
+}
+
+class _WorkoutWithIndex {
+  final int index;
+  final Map<String, dynamic> data;
+
+  _WorkoutWithIndex({required this.index, required this.data});
 }
