@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'add_workout_page.dart'; // You'll need to create this file
+import 'add_workout_page.dart';
 
 class WorkoutHistoryPage extends StatefulWidget {
   const WorkoutHistoryPage({super.key});
@@ -24,10 +24,9 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     final jsonList = prefs.getStringList('workoutLogs') ?? [];
 
     final parsed = jsonList
-      .map((e) => json.decode(e) as Map<String, dynamic>)
-      .toList();
+        .map((e) => json.decode(e) as Map<String, dynamic>)
+        .toList();
 
-    // Sort by date descending (most recent first)
     parsed.sort((a, b) {
       final dateA = DateTime.tryParse(a['date'] ?? '') ?? DateTime(2000);
       final dateB = DateTime.tryParse(b['date'] ?? '') ?? DateTime(2000);
@@ -46,8 +45,14 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
         title: const Text('Delete Workout'),
         content: const Text('Are you sure you want to delete this workout?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -65,11 +70,29 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     }
   }
 
+  Future<void> _editWorkout(int index) async {
+    final selectedWorkout = _workouts[index];
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddWorkoutPage(
+          initialWorkout: selectedWorkout,
+          workoutIndex: index,
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _loadWorkoutLogs();
+    }
+  }
+
   Future<void> _goToAddWorkoutPage() async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const AddWorkoutPage()),
     );
+
     if (result == true) {
       _loadWorkoutLogs();
     }
@@ -106,6 +129,11 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              tooltip: 'Edit Workout',
+                              onPressed: () => _editWorkout(index),
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
