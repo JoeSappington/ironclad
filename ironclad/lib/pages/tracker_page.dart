@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
+import 'package:ironclad/widgets/exercise_entry_widget.dart';
 
 class TrackerPage extends StatefulWidget {
   const TrackerPage({super.key});
@@ -55,7 +56,7 @@ class _TrackerPageState extends State<TrackerPage> {
   }
 
   void _onFieldChanged() {
-    setState(() {}); // Recalculate _canLogWorkout
+    setState(() {});
   }
 
   Future<void> _logWorkout() async {
@@ -89,207 +90,65 @@ class _TrackerPageState extends State<TrackerPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Current Workout')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Column(
-          children: [
-            if (_exercises.isEmpty)
-              Center(
-                child: ElevatedButton.icon(
-                  onPressed: _addExercise,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Exercise'),
-                ),
-              ),
-
-            const SizedBox(height: 8),
-
-            ..._exercises.asMap().entries.map((entry) {
-              final index = entry.key;
-              final exercise = entry.value;
-
-              return Column(
-                children: [
-                  Card(
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: DropdownButtonFormField<String>(
-                                  value: exercise.selectedExercise,
-                                  hint: const Text('Select Exercise'),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      exercise.selectedExercise = value;
-                                    });
-                                  },
-                                  items: _exerciseOptions.map((e) {
-                                    return DropdownMenuItem(
-                                      value: e,
-                                      child: Text(e),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: () => _removeExercise(index),
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          ...exercise.sets.asMap().entries.map((setEntry) {
-                            final i = setEntry.key;
-                            final set = setEntry.value;
-
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: Row(
-                                children: [
-                                  Text('Set ${i + 1}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: TextField(
-                                      controller: set.weightController,
-                                      keyboardType: TextInputType.number,
-                                      onChanged: (_) => _onFieldChanged(),
-                                      decoration: const InputDecoration(
-                                        labelText: 'Weight',
-                                        isDense: true,
-                                        border: OutlineInputBorder(),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: TextField(
-                                      controller: set.repsController,
-                                      keyboardType: TextInputType.number,
-                                      onChanged: (_) => _onFieldChanged(),
-                                      decoration: const InputDecoration(
-                                        labelText: 'Reps',
-                                        isDense: true,
-                                        border: OutlineInputBorder(),
-                                      ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        exercise.removeSet(i);
-                                      });
-                                    },
-                                    icon: const Icon(Icons.delete, color: Colors.red),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  exercise.addSet();
-                                });
-                              },
-                              icon: const Icon(Icons.add),
-                              label: const Text('Add Set'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              );
-            }),
-
-            if (_exercises.isNotEmpty)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  ElevatedButton.icon(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            children: [
+              if (_exercises.isEmpty)
+                Center(
+                  child: ElevatedButton.icon(
                     onPressed: _addExercise,
                     icon: const Icon(Icons.add),
                     label: const Text('Add Exercise'),
                   ),
-                  if (_canLogWorkout)
-                    ElevatedButton.icon(
-                      onPressed: _logWorkout,
-                      icon: const Icon(Icons.save),
-                      label: const Text('Log Workout'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                ],
-              ),
+                ),
+              ..._exercises.asMap().entries.map((entry) {
+                final index = entry.key;
+                final exercise = entry.value;
 
-            SizedBox(height: bottomPadding),
-          ],
+                return ExerciseEntryWidget(
+                  entry: exercise,
+                  index: index,
+                  exerciseOptions: _exerciseOptions,
+                  onRemove: () => _removeExercise(index),
+                  onAddSet: () {
+                    setState(() {
+                      exercise.addSet();
+                    });
+                  },
+                );
+              }),
+              if (_exercises.isNotEmpty)
+                Row(
+                  mainAxisAlignment: _canLogWorkout
+                      ? MainAxisAlignment.spaceBetween
+                      : MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _addExercise,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Exercise'),
+                    ),
+                    if (_canLogWorkout)
+                      ElevatedButton.icon(
+                        onPressed: _logWorkout,
+                        icon: const Icon(Icons.save),
+                        label: const Text('Log Workout'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 16),
+                          textStyle: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                  ],
+                ),
+              SizedBox(height: bottomPadding),
+            ],
+          ),
         ),
       ),
     );
-  }
-}
-
-class ExerciseEntry {
-  String? selectedExercise;
-  final List<ExerciseSet> sets = [];
-  final VoidCallback? onChanged;
-
-  ExerciseEntry({this.onChanged}) {
-    addSet();
-  }
-
-  void addSet() {
-    final set = ExerciseSet();
-    set.weightController.addListener(_handleChange);
-    set.repsController.addListener(_handleChange);
-    sets.add(set);
-  }
-
-  void removeSet(int index) {
-    sets[index].dispose();
-    sets.removeAt(index);
-  }
-
-  void _handleChange() {
-    if (onChanged != null) onChanged!();
-  }
-
-  void dispose() {
-    for (final set in sets) {
-      set.dispose();
-    }
-  }
-
-  Map<String, dynamic> toJson() => {
-        'name': selectedExercise,
-        'sets': sets.map((s) => s.toJson()).toList(),
-      };
-}
-
-class ExerciseSet {
-  final TextEditingController weightController = TextEditingController();
-  final TextEditingController repsController = TextEditingController();
-
-  Map<String, dynamic> toJson() => {
-        'weight': weightController.text.trim(),
-        'reps': repsController.text.trim(),
-      };
-
-  void dispose() {
-    weightController.dispose();
-    repsController.dispose();
   }
 }
