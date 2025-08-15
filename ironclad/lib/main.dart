@@ -45,22 +45,33 @@ class _MyHomePageState extends State<MyHomePage> {
     final prefs = await SharedPreferences.getInstance();
     final logs = prefs.getStringList('workoutLogs') ?? [];
 
-    final dates = logs.map((entry) {
-      final map = json.decode(entry) as Map<String, dynamic>;
-      final dateStr = map['date'] ?? '';
-      return DateTime.tryParse(dateStr)?.toLocal();
+    final workoutDates = logs.map((e) {
+      final workout = json.decode(e);
+      return DateTime.tryParse(workout['date'] ?? '')?.toLocal();
     }).whereType<DateTime>().toList();
 
-    dates.sort((a, b) => b.compareTo(a));
+    final uniqueDates = workoutDates
+        .map((d) => DateTime(d.year, d.month, d.day))
+        .toSet()
+        .toList();
+
+    uniqueDates.sort((a, b) => b.compareTo(a)); // newest to oldest
 
     int streak = 0;
-    DateTime today = DateTime.now();
-    for (int i = 0; i < dates.length; i++) {
-      final date = dates[i];
-      final streakDate = today.subtract(Duration(days: streak));
-      if (_isSameDay(date, streakDate)) {
+    DateTime now = DateTime.now();
+    DateTime today = DateTime(now.year, now.month, now.day);
+    DateTime dayToCheck = today;
+
+    while (true) {
+      if (uniqueDates.contains(dayToCheck)) {
         streak++;
-      } else if (date.isBefore(streakDate)) {
+        dayToCheck = dayToCheck.subtract(const Duration(days: 1));
+      } else {
+        // ❗ If today is empty but yesterday has a workout, keep streak
+        if (dayToCheck == today) {
+          dayToCheck = dayToCheck.subtract(const Duration(days: 1));
+          continue;
+        }
         break;
       }
     }
@@ -68,10 +79,6 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       workoutStreak = streak;
     });
-  }
-
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   Future<void> _goToTrackerPage() async {
