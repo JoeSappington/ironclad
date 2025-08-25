@@ -14,16 +14,19 @@ class WorkoutTemplate {
   factory WorkoutTemplate.fromJson(Map<String, dynamic> json) {
     return WorkoutTemplate(
       name: json['name'],
-      exercises: List<Map<String, dynamic>>.from(json['exercises']),
+      exercises: List<Map<String, dynamic>>.from(
+        (json['exercises'] ?? []).map((e) => Map<String, dynamic>.from(e)),
+      ),
     );
   }
 
+  // ✅ These fix the error in TemplateManager:
   static String encodeList(List<WorkoutTemplate> templates) {
-    return json.encode(templates.map((e) => e.toJson()).toList());
+    return json.encode(templates.map((t) => t.toJson()).toList());
   }
 
   static List<WorkoutTemplate> decodeList(String jsonString) {
-    final List<dynamic> decoded = json.decode(jsonString);
-    return decoded.map((e) => WorkoutTemplate.fromJson(e)).toList();
+    final List<dynamic> list = json.decode(jsonString);
+    return list.map((e) => WorkoutTemplate.fromJson(e)).toList();
   }
 }
