@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import '../widgets/exercise_entry_widget.dart';
+import '../models/workout_template.dart';
+import '../utils/template_manager.dart';
 
 class AddWorkoutPage extends StatefulWidget {
   final Map<String, dynamic>? existingWorkout;
@@ -32,6 +34,8 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
 
   final List<ExerciseEntry> _exercises = [];
   DateTime _selectedDateTime = DateTime.now();
+  List<WorkoutTemplate> _templates = [];
+  String _selectedTemplateName = 'Custom Workout';
 
   bool get _canSaveWorkout {
     for (final exercise in _exercises) {
@@ -49,6 +53,7 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
   @override
   void initState() {
     super.initState();
+    _loadTemplates();
 
     if (widget.existingWorkout != null) {
       final dateStr = widget.existingWorkout!['date'];
@@ -68,7 +73,16 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
         }
         _exercises.add(entry);
       }
+    } else {
+      _addExercise(); // start with 1 empty block
     }
+  }
+
+  Future<void> _loadTemplates() async {
+    final templates = await TemplateManager.loadTemplates();
+    setState(() {
+      _templates = templates;
+    });
   }
 
   void _onFieldChanged() {
@@ -86,6 +100,33 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
     setState(() {
       _exercises[index].dispose();
       _exercises.removeAt(index);
+    });
+  }
+
+  void _applyTemplate(WorkoutTemplate template) {
+    setState(() {
+      for (final e in _exercises) {
+        e.dispose();
+      }
+      _exercises.clear();
+
+      for (final ex in template.exercises) {
+        final entry = ExerciseEntry(onChanged: _onFieldChanged);
+        entry.selectedExercise = ex['name'];
+        entry.sets.clear();
+
+        final int setCount = ex['sets'] ?? 1;
+        for (int i = 0; i < setCount; i++) {
+          final set = ExerciseSet();
+          set.weightController.addListener(entry.handleChange);
+          set.repsController.addListener(entry.handleChange);
+          entry.sets.add(set);
+        }
+
+        _exercises.add(entry);
+      }
+
+      _selectedTemplateName = template.name;
     });
   }
 
@@ -159,6 +200,7 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
@@ -176,18 +218,40 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 16),
-
-              if (_exercises.isEmpty)
-                Center(
-                  child: ElevatedButton.icon(
-                    onPressed: _addExercise,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Exercise'),
+              DropdownButtonFormField<String>(
+                value: _selectedTemplateName,
+                onChanged: (value) {
+                  if (value == null || value == 'Custom Workout') {
+                    setState(() {
+                      _selectedTemplateName = 'Custom Workout';
+                      for (final e in _exercises) {
+                        e.dispose();
+                      }
+                      _exercises.clear();
+                      _addExercise();
+                    });
+                  } else {
+                    final selected = _templates.firstWhere((t) => t.name == value);
+                    _applyTemplate(selected);
+                  }
+                },
+                items: [
+                  const DropdownMenuItem(
+                    value: 'Custom Workout',
+                    child: Text('Custom Workout'),
                   ),
+                  ..._templates.map((t) => DropdownMenuItem(
+                        value: t.name,
+                        child: Text(t.name),
+                      )),
+                ],
+                decoration: const InputDecoration(
+                  labelText: 'Workout Template',
+                  border: OutlineInputBorder(),
                 ),
-
+              ),
+              const SizedBox(height: 20),
               ..._exercises.asMap().entries.map((entry) {
                 final index = entry.key;
                 final exercise = entry.value;
@@ -204,7 +268,7 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
                   },
                 );
               }),
-
+              const SizedBox(height: 16),
               if (_exercises.isNotEmpty)
                 Row(
                   mainAxisAlignment: _canSaveWorkout
@@ -224,7 +288,6 @@ class _AddWorkoutPageState extends State<AddWorkoutPage> {
                       ),
                   ],
                 ),
-
               const SizedBox(height: 32),
             ],
           ),

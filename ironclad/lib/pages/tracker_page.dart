@@ -58,7 +58,11 @@ class _TrackerPageState extends State<TrackerPage> {
     final templates = await TemplateManager.loadTemplates();
     setState(() {
       _templates = templates;
-    });
+      final templateNames = templates.map((t) => t.name).toList();
+      if (_selectedTemplateName != 'Custom Workout' && !templateNames.contains(_selectedTemplateName)) {
+        _selectedTemplateName = 'Custom Workout';
+    }
+  });
   }
 
   void _onFieldChanged() {
