@@ -25,4 +25,16 @@ class TemplateManager {
     existing.removeWhere((t) => t.name == name);
     await prefs.setString(_key, WorkoutTemplate.encodeList(existing));
   }
+
+  static Future<void> updateTemplate(String oldName, WorkoutTemplate updatedTemplate) async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = await loadTemplates();
+    final index = existing.indexWhere((t) => t.name == oldName);
+    if (index != -1) {
+      existing[index] = updatedTemplate;
+    } else {
+      existing.add(updatedTemplate);
+    }
+    await prefs.setString(_key, WorkoutTemplate.encodeList(existing));
+  }
 }

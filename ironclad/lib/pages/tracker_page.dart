@@ -1,3 +1,4 @@
+// tracker_page.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -5,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:ironclad/widgets/exercise_entry_widget.dart';
 import 'package:ironclad/models/workout_template.dart';
 import 'package:ironclad/utils/template_manager.dart';
+import 'package:ironclad/pages/edit_template_page.dart';
 
 class TrackerPage extends StatefulWidget {
   const TrackerPage({super.key});
@@ -49,7 +51,7 @@ class _TrackerPageState extends State<TrackerPage> {
   void initState() {
     super.initState();
     _loadTemplates();
-    _addExercise(); // Always start with 1 block
+    _addExercise();
   }
 
   Future<void> _loadTemplates() async {
@@ -115,37 +117,25 @@ class _TrackerPageState extends State<TrackerPage> {
         title: const Text('Save as Template'),
         content: TextField(
           controller: templateNameController,
-          decoration: const InputDecoration(
-            labelText: 'Template Name',
-          ),
+          decoration: const InputDecoration(labelText: 'Template Name'),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
               final name = templateNameController.text.trim();
               if (name.isEmpty) return;
-
               final newTemplate = WorkoutTemplate(
                 name: name,
-                exercises: _exercises.map((e) {
-                  return {
-                    'name': e.selectedExercise ?? '',
-                    'sets': e.sets.length,
-                  };
+                exercises: _exercises.map((e) => {
+                  'name': e.selectedExercise ?? '',
+                  'sets': e.sets.length,
                 }).toList(),
               );
-
               await TemplateManager.saveTemplate(newTemplate);
-
               Navigator.pop(context);
-              _loadTemplates();
-              setState(() {
-                _selectedTemplateName = name;
-              });
+              await _loadTemplates();
+              setState(() => _selectedTemplateName = name);
             },
             child: const Text('Save'),
           ),
@@ -165,7 +155,6 @@ class _TrackerPageState extends State<TrackerPage> {
         final entry = ExerciseEntry(onChanged: _onFieldChanged);
         entry.selectedExercise = ex['name'];
         entry.sets.clear();
-
         final int setCount = ex['sets'] ?? 1;
         for (int i = 0; i < setCount; i++) {
           final set = ExerciseSet();
@@ -173,7 +162,6 @@ class _TrackerPageState extends State<TrackerPage> {
           set.repsController.addListener(entry.handleChange);
           entry.sets.add(set);
         }
-
         _exercises.add(entry);
       }
 
@@ -198,6 +186,35 @@ class _TrackerPageState extends State<TrackerPage> {
     Navigator.pop(context, true);
   }
 
+  void _editTemplate(String templateName) async {
+    final template = _templates.firstWhere((t) => t.name == templateName);
+    final updated = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => EditTemplatePage(template: template)),
+    );
+    if (updated == true) {
+      _loadTemplates();
+    }
+  }
+
+  void _deleteTemplate(String templateName) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Template?'),
+        content: Text('Are you sure you want to delete "$templateName"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await TemplateManager.deleteTemplate(templateName);
+      _loadTemplates();
+    }
+  }
+
   @override
   void dispose() {
     for (final e in _exercises) {
@@ -218,31 +235,63 @@ class _TrackerPageState extends State<TrackerPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DropdownButtonFormField<String>(
-                value: _selectedTemplateName,
-                onChanged: (value) {
-                  if (value == null || value == 'Custom Workout') {
-                    _clearWorkout();
-                  } else {
-                    final selected = _templates.firstWhere((t) => t.name == value);
-                    _applyTemplate(selected);
-                  }
-                },
-                items: [
-                  const DropdownMenuItem(
-                    value: 'Custom Workout',
-                    child: Text('Custom Workout'),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedTemplateName,
+                      onChanged: (value) {
+                        if (value == null || value == 'Custom Workout') {
+                          _clearWorkout();
+                        } else {
+                          final selected = _templates.firstWhere((t) => t.name == value);
+                          _applyTemplate(selected);
+                        }
+                      },
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'Custom Workout',
+                          child: Text('Custom Workout'),
+                        ),
+                        ..._templates.map(
+                          (t) => DropdownMenuItem(
+                            value: t.name,
+                            child: Text(t.name),
+                          ),
+                        ),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'Workout Template',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
                   ),
-                  ..._templates.map((t) => DropdownMenuItem(
-                        value: t.name,
-                        child: Text(t.name),
-                      )),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) {
+                      if (value.startsWith('edit:')) {
+                        _editTemplate(value.substring(5));
+                      } else if (value.startsWith('delete:')) {
+                        _deleteTemplate(value.substring(7));
+                      }
+                    },
+                    itemBuilder: (context) => _templates
+                        .map((t) => PopupMenuItem<String>(
+                              value: 'edit:${t.name}',
+                              child: Text('Edit: ${t.name}'),
+                            ))
+                        .followedBy(
+                          _templates.map((t) => PopupMenuItem<String>(
+                                value: 'delete:${t.name}',
+                                child: Text('Delete: ${t.name}'),
+                              )),
+                        )
+                        .toList(),
+                  ),
                 ],
-                decoration: const InputDecoration(
-                  labelText: 'Workout Template',
-                  border: OutlineInputBorder(),
-                ),
               ),
+
               const SizedBox(height: 20),
               ..._exercises.asMap().entries.map((entry) {
                 final index = entry.key;
