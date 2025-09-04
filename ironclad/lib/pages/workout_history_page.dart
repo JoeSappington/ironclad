@@ -1,5 +1,3 @@
-// UPDATED: workout_history_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -16,13 +14,14 @@ class WorkoutHistoryPage extends StatefulWidget {
 class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
   List<_WorkoutWithIndex> _workouts = [];
   bool _modified = false;
-  bool _showCalendarView = false;
+  bool _calendarView = false;
   DateTime _focusedDay = DateTime.now();
-  DateTime _selectedDay = DateTime.now();
+  DateTime? _selectedDay;
 
   @override
   void initState() {
     super.initState();
+    _selectedDay = _focusedDay;
     _loadWorkoutLogs();
   }
 
@@ -47,15 +46,35 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     });
   }
 
-  Future<void> _deleteWorkout(int originalIndex) async {
+  List<_WorkoutWithIndex> _getWorkoutsForDay(DateTime day) {
+    return _workouts.where((w) {
+      final date = DateTime.tryParse(w.data['date'] ?? '');
+      return date != null &&
+          date.year == day.year &&
+          date.month == day.month &&
+          date.day == day.day;
+    }).toList();
+  }
+
+  bool _hasWorkoutOnDay(DateTime day) {
+    return _getWorkoutsForDay(day).isNotEmpty;
+  }
+
+  Future<void> _deleteWorkout(int sortedIndex) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Workout'),
         content: const Text('Are you sure you want to delete this workout?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -63,6 +82,8 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     if (confirmed == true) {
       final prefs = await SharedPreferences.getInstance();
       final jsonList = prefs.getStringList('workoutLogs') ?? [];
+
+      final originalIndex = _workouts[sortedIndex].index;
 
       if (originalIndex < jsonList.length) {
         jsonList.removeAt(originalIndex);
@@ -84,9 +105,11 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     }
   }
 
-  Future<void> _goToEditWorkoutPage(int originalIndex) async {
+  Future<void> _goToEditWorkoutPage(int sortedIndex) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = prefs.getStringList('workoutLogs') ?? [];
+
+    final originalIndex = _workouts[sortedIndex].index;
 
     if (originalIndex < jsonList.length) {
       final workoutData = json.decode(jsonList[originalIndex]) as Map<String, dynamic>;
@@ -94,10 +117,8 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => AddWorkoutPage(
-            existingWorkout: workoutData,
-            workoutIndex: originalIndex,
-          ),
+          builder: (context) =>
+              AddWorkoutPage(existingWorkout: workoutData, workoutIndex: originalIndex),
         ),
       );
 
@@ -108,24 +129,9 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
     }
   }
 
-  List<_WorkoutWithIndex> _getWorkoutsForDay(DateTime day) {
-    return _workouts.where((w) {
-      final date = DateTime.tryParse(w.data['date'] ?? '');
-      return date != null && date.year == day.year && date.month == day.month && date.day == day.day;
-    }).toList();
-  }
-
-  Set<DateTime> _getWorkoutDays() {
-    return _workouts.map((w) {
-      final d = DateTime.tryParse(w.data['date'] ?? '') ?? DateTime(2000);
-      return DateTime(d.year, d.month, d.day);
-    }).toSet();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final workoutDays = _getWorkoutDays();
-    final selectedWorkouts = _getWorkoutsForDay(_selectedDay);
+    final calendarWorkouts = _getWorkoutsForDay(_selectedDay!);
 
     return WillPopScope(
       onWillPop: () async {
@@ -137,126 +143,78 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
           title: const Text('Workout History'),
           actions: [
             IconButton(
-              icon: Icon(_showCalendarView ? Icons.list : Icons.calendar_month),
-              tooltip: 'Toggle View',
+              icon: Icon(_calendarView ? Icons.list : Icons.calendar_today),
+              tooltip: _calendarView ? 'Show List View' : 'Show Calendar View',
               onPressed: () {
-                setState(() => _showCalendarView = !_showCalendarView);
+                setState(() {
+                  _calendarView = !_calendarView;
+                });
               },
             ),
           ],
         ),
         body: _workouts.isEmpty
             ? const Center(child: Text('No workouts logged yet.'))
-            : _showCalendarView
+            : _calendarView
                 ? Column(
                     children: [
                       TableCalendar(
-                        focusedDay: _focusedDay,
                         firstDay: DateTime.utc(2020, 1, 1),
-                        lastDay: DateTime.utc(2100, 1, 1),
-                        selectedDayPredicate: (day) => isSameDay(day, _selectedDay),
-                        onDaySelected: (selected, focused) {
-                          if (!selected.isAfter(DateTime.now())) {
-                            setState(() {
-                              _selectedDay = selected;
-                              _focusedDay = focused;
-                            });
-                          }
+                        lastDay: DateTime.utc(2100, 12, 31),
+                        focusedDay: _focusedDay,
+                        selectedDayPredicate: (day) =>
+                            isSameDay(day, _selectedDay),
+                        onDaySelected: (selectedDay, focusedDay) {
+                          if (selectedDay.isAfter(DateTime.now())) return;
+                          setState(() {
+                            _selectedDay = selectedDay;
+                            _focusedDay = focusedDay;
+                          });
                         },
                         calendarStyle: CalendarStyle(
                           todayDecoration: BoxDecoration(
-                            border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2),
                             shape: BoxShape.circle,
+                            border: Border.all(color: Colors.blueAccent, width: 2),
                           ),
-                          selectedDecoration: const BoxDecoration(
-                            color: Colors.orange,
-                            shape: BoxShape.circle,
-                          ),
-                          markerDecoration: const BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                          ),
+                          outsideDaysVisible: false,
                         ),
                         calendarBuilders: CalendarBuilders(
-                          markerBuilder: (context, date, events) {
-                            final hasWorkout = workoutDays.contains(DateTime(date.year, date.month, date.day));
-                            return hasWorkout
-                                ? const Positioned(
-                                    bottom: 1,
-                                    child: Icon(Icons.fitness_center, size: 12, color: Colors.green),
-                                  )
-                                : null;
+                          defaultBuilder: (context, day, _) {
+                            if (_hasWorkoutOnDay(day)) {
+                              return Center(
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade400,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '${day.day}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            return null;
                           },
                         ),
                       ),
                       Expanded(
-                        child: selectedWorkouts.isEmpty
+                        child: calendarWorkouts.isEmpty
                             ? const Center(child: Text('No workouts for this day.'))
                             : ListView.builder(
                                 padding: const EdgeInsets.all(16),
-                                itemCount: selectedWorkouts.length,
+                                itemCount: calendarWorkouts.length,
                                 itemBuilder: (context, index) {
-                                  final workout = selectedWorkouts[index].data;
-                                  final originalIndex = selectedWorkouts[index].index;
-                                  final date = workout['date'] ?? 'Unknown Date';
+                                  final workout = calendarWorkouts[index].data;
                                   final exercises = workout['exercises'] as List<dynamic>;
-
-                                  return Card(
-                                    margin: const EdgeInsets.symmetric(vertical: 8),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  date,
-                                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                                ),
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(Icons.edit),
-                                                tooltip: 'Edit Workout',
-                                                onPressed: () => _goToEditWorkoutPage(originalIndex),
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(Icons.delete, color: Colors.red),
-                                                tooltip: 'Delete Workout',
-                                                onPressed: () => _deleteWorkout(originalIndex),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          ...exercises.map((e) {
-                                            final name = e['name'];
-                                            final sets = e['sets'] as List<dynamic>;
-                                            return Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(name,
-                                                    style: const TextStyle(
-                                                        fontSize: 15, fontWeight: FontWeight.w600)),
-                                                ...sets.asMap().entries.map((entry) {
-                                                  final i = entry.key + 1;
-                                                  final set = entry.value;
-                                                  return Padding(
-                                                    padding: const EdgeInsets.only(left: 12, top: 4),
-                                                    child: Text(
-                                                      'Set $i: ${set['weight']} lbs × ${set['reps']} reps',
-                                                      style: const TextStyle(fontSize: 14),
-                                                    ),
-                                                  );
-                                                }),
-                                                const SizedBox(height: 10),
-                                              ],
-                                            );
-                                          }),
-                                        ],
-                                      ),
-                                    ),
-                                  );
+                                  return _buildWorkoutCard(workout, exercises, index);
                                 },
                               ),
                       ),
@@ -267,66 +225,8 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
                     itemCount: _workouts.length,
                     itemBuilder: (context, index) {
                       final workout = _workouts[index].data;
-                      final originalIndex = _workouts[index].index;
-                      final date = workout['date'] ?? 'Unknown Date';
                       final exercises = workout['exercises'] as List<dynamic>;
-
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      date,
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit),
-                                    tooltip: 'Edit Workout',
-                                    onPressed: () => _goToEditWorkoutPage(originalIndex),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red),
-                                    tooltip: 'Delete Workout',
-                                    onPressed: () => _deleteWorkout(originalIndex),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              ...exercises.map((e) {
-                                final name = e['name'];
-                                final sets = e['sets'] as List<dynamic>;
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(name,
-                                        style: const TextStyle(
-                                            fontSize: 15, fontWeight: FontWeight.w600)),
-                                    ...sets.asMap().entries.map((entry) {
-                                      final i = entry.key + 1;
-                                      final set = entry.value;
-                                      return Padding(
-                                        padding: const EdgeInsets.only(left: 12, top: 4),
-                                        child: Text(
-                                          'Set $i: ${set['weight']} lbs × ${set['reps']} reps',
-                                          style: const TextStyle(fontSize: 14),
-                                        ),
-                                      );
-                                    }),
-                                    const SizedBox(height: 10),
-                                  ],
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                      );
+                      return _buildWorkoutCard(workout, exercises, index);
                     },
                   ),
         floatingActionButton: FloatingActionButton(
@@ -337,10 +237,80 @@ class _WorkoutHistoryPageState extends State<WorkoutHistoryPage> {
       ),
     );
   }
+
+  Widget _buildWorkoutCard(
+      Map<String, dynamic> workout, List<dynamic> exercises, int index) {
+    final date = workout['date'] ?? 'Unknown Date';
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    date,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  tooltip: 'Edit Workout',
+                  onPressed: () => _goToEditWorkoutPage(index),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  tooltip: 'Delete Workout',
+                  onPressed: () => _deleteWorkout(index),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...exercises.map((e) {
+              final name = e['name'];
+              final sets = e['sets'] as List<dynamic>;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  ...sets.asMap().entries.map((entry) {
+                    final i = entry.key + 1;
+                    final set = entry.value;
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 12, top: 4),
+                      child: Text(
+                        'Set $i: ${set['weight']} lbs × ${set['reps']} reps',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 10),
+                ],
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _WorkoutWithIndex {
   final int index;
   final Map<String, dynamic> data;
+
   _WorkoutWithIndex({required this.index, required this.data});
 }
